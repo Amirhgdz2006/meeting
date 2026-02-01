@@ -8,4 +8,3 @@ from app.modules.users.domain.user_model import User
 app = FastAPI()
 
 
-Base.metadata.create_all(bind=engine)
