@@ -1,6 +1,5 @@
 from fastapi import FastAPI
-from app.db.session.session import engine, Base
-from app.modules.auth.router import router as auth_router
+from app.modules.auth.router import router as auth_router, callback_router
 
 app = FastAPI(
     title="Meeting Management API",
@@ -10,5 +9,4 @@ app = FastAPI(
 
 # Include routers
 app.include_router(auth_router, prefix="/api/v1")
-
-
+app.include_router(callback_router)  # No prefix for OAuth callback

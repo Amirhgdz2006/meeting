@@ -1,31 +1,37 @@
 from sqlalchemy.orm import Session
 from datetime import datetime
-from typing import Optional
 from app.integrations.google.oauth import GoogleOAuthService
 from app.modules.users.repositories import UserRepository
-from app.modules.users.models import User
 from app.core.security import create_access_token
-from app.core.config.settings import settings
 from app.modules.auth.schemas import GoogleOAuthResponse, UserResponse
 
 
 class AuthService:
     
     @staticmethod
-    def authenticate_with_google(db: Session, code: str) -> GoogleOAuthResponse:
+    def authenticate_with_google(db: Session, authorization_response: str) -> GoogleOAuthResponse:
         """
-        Authenticate user with Google OAuth and save/update user data in database
+        Authenticate user with Google OAuth using the full authorization response URL
+        
+        Args:
+            db: Database session
+            authorization_response: Full callback URL from Google
+        
+        Returns:
+            GoogleOAuthResponse with JWT token and user info
         """
-        # Exchange code for tokens
-        tokens = GoogleOAuthService.exchange_code_for_tokens(code)
-        access_token = tokens['access_token']
-        refresh_token = tokens.get('refresh_token')
-        expires_at = tokens.get('expiry')
+        # Fetch credentials and user info from Google
+        result = GoogleOAuthService.fetch_credentials_from_callback(authorization_response)
         
-        # Get user info from Google
-        user_info = GoogleOAuthService.get_user_info(access_token)
+        credentials = result['credentials']
+        user_info = result['user_info']
         
-        # Check if user exists by google_id or email
+        # Extract tokens
+        access_token = credentials['access_token']
+        refresh_token = credentials.get('refresh_token')
+        expires_at = credentials.get('expiry')
+        
+        # Check if user exists by google_id
         user = UserRepository.get_by_google_id(db, user_info['google_id'])
         
         if not user:
@@ -61,7 +67,8 @@ class AuthService:
                 'google_access_token': access_token,
                 'google_refresh_token': refresh_token,
                 'google_token_expires_at': expires_at,
-                'google_calendar_connected': True
+                'google_calendar_connected': True,
+                'is_active': True
             })
             user = UserRepository.create(db, user_data)
         
@@ -87,7 +94,5 @@ class AuthService:
     
     @staticmethod
     def get_google_authorization_url() -> str:
-        """
-        Get Google OAuth authorization URL
-        """
+        """Get Google OAuth authorization URL"""
         return GoogleOAuthService.get_authorization_url()
