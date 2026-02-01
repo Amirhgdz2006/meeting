@@ -8,12 +8,12 @@ from pathlib import Path
 # اضافه کردن root directory به Python path
 sys.path.append(str(Path(__file__).resolve().parents[4]))
 
-from app.core.config.db_setting import settings
+from app.core.config.settings import settings
 from app.db.session.session import Base
 
 # Import کردن تمام models
-from app.modules.users.domain.user_model import User
-from app.modules.meetings.domain.meeting_model import Meeting
+from app.modules.users.models import User
+
 
 # this is the Alembic Config object
 config = context.config

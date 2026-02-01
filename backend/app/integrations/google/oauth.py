@@ -22,8 +22,8 @@ class GoogleOAuthService:
         'https://www.googleapis.com/auth/calendar.events',
         'openid'
     ]
-    
-    
+
+
     @staticmethod
     def get_authorization_url() -> str:
 
@@ -49,7 +49,7 @@ class GoogleOAuthService:
         
         return authorization_url
     
-
+    
     @staticmethod
     def exchange_code_for_tokens(code: str) -> Dict:
 
