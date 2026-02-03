@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from app.db.session.session import get_db
-from app.modules.auth.services import AuthService
+from app.modules.auth.services import authenticate_with_google
+from app.integrations.google.oauth import get_google_authorization_url
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -16,7 +17,7 @@ async def google_login():
     Redirect user to Google OAuth authorization page
     """
     try:
-        auth_url = AuthService.get_google_authorization_url()
+        auth_url = get_google_authorization_url()
         return RedirectResponse(url=auth_url)
     except Exception as e:
         raise HTTPException(
@@ -39,7 +40,7 @@ async def oauth2callback(
         authorization_response = str(request.url)
         
         # Authenticate user with the full authorization response
-        result = AuthService.authenticate_with_google(db, authorization_response)
+        result = authenticate_with_google(db, authorization_response)
         
         # Return JSON response
         return {
@@ -81,7 +82,7 @@ async def google_callback(
         authorization_response = str(request.url)
         
         # Authenticate user with the full authorization response
-        result = AuthService.authenticate_with_google(db, authorization_response)
+        result = authenticate_with_google(db, authorization_response)
         
         # Return JSON response
         return {

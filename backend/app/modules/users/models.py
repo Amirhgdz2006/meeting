@@ -11,8 +11,8 @@ class User(Base):
     hashed_password = Column(String, nullable=True)
     first_name = Column(String, nullable=True)
     last_name = Column(String, nullable=True)
-    org_level = Column(String, nullable=True)
-    hire_date = Column(DateTime, nullable=True)
+    org_level = Column(String, nullable=True, default=None)
+    hire_date = Column(DateTime, nullable=True, default=None)
 
     
     # User status
