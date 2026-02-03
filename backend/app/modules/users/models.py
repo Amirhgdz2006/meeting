@@ -5,11 +5,15 @@ from app.db.session.session import Base
 class User(Base):
     __tablename__ = "users"
     
+    # User info
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, nullable=False, index=True)
+    hashed_password = Column(String, nullable=True)
     first_name = Column(String, nullable=True)
     last_name = Column(String, nullable=True)
-    hashed_password = Column(String, nullable=True)
+    org_level = Column(String, nullable=True)
+    hire_date = Column(DateTime, nullable=True)
+
     
     # User status
     is_active = Column(Boolean, default=True)
