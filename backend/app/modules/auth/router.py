@@ -27,10 +27,7 @@ async def google_login():
 
 
 @callback_router.get("/oauth2callback")
-async def oauth2callback(
-    request: Request,
-    db: Session = Depends(get_db)
-):
+async def oauth2callback(request: Request, db: Session = Depends(get_db)):
     """
     Handle Google OAuth callback
     This endpoint matches the redirect_uri registered in Google Console
@@ -69,10 +66,7 @@ async def oauth2callback(
 
 
 @router.get("/google/callback")
-async def google_callback(
-    request: Request,
-    db: Session = Depends(get_db)
-):
+async def google_callback(request: Request, db: Session = Depends(get_db)):
     """
     Handle Google OAuth callback
     Google redirects here with the authorization code and other parameters

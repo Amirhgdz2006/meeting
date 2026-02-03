@@ -1,7 +1,7 @@
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from google.auth.transport.requests import Request
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict
 import os
 import requests
@@ -62,9 +62,7 @@ def get_google_authorization_url() -> str:
     return authorization_url
 
 
-def fetch_google_credentials_from_callback(
-    authorization_response: str,
-) -> Dict:
+def fetch_google_credentials_from_callback(authorization_response: str) -> Dict:
     """
     Exchange Google OAuth callback URL for access & refresh tokens
     and fetch user profile information.
@@ -74,13 +72,8 @@ def fetch_google_credentials_from_callback(
     credentials = flow.credentials
 
     # Fetch user info
-    response = requests.get(
-        "https://www.googleapis.com/oauth2/v2/userinfo",
-        headers={
-            "Authorization": f"Bearer {credentials.token}"
-        },
-        timeout=10,
-    )
+    response = requests.get("https://www.googleapis.com/oauth2/v2/userinfo", headers={"Authorization": f"Bearer {credentials.token}"}, timeout=10)
+
     response.raise_for_status()
     user_info = response.json()
 
@@ -121,10 +114,7 @@ def refresh_google_access_token(refresh_token: str) -> Dict:
     request = Request()
     credentials.refresh(request)
 
-    return {
-        "access_token": credentials.token,
-        "expiry": credentials.expiry,
-    }
+    return {"access_token": credentials.token, "expiry": credentials.expiry}
 
 
 def is_google_token_expired(expires_at: datetime) -> bool:
@@ -135,7 +125,8 @@ def is_google_token_expired(expires_at: datetime) -> bool:
         return True
 
     buffer_time = timedelta(minutes=5)
-    return datetime.utcnow() + buffer_time >= expires_at
+    now = datetime.now(timezone.utc)  # <-- tz-aware
+    return now + buffer_time >= expires_at
 
 
 def revoke_google_token(token: str) -> bool:

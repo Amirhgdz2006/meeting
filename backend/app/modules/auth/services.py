@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, timezone
 from app.integrations.google.oauth import fetch_google_credentials_from_callback, get_google_authorization_url
 from app.modules.users.repositories import get_user_by_google_id, get_user_by_email, create_user, update_user, update_user_google_tokens
 from app.core.security import create_access_token
@@ -44,20 +44,14 @@ def authenticate_with_google(db: Session, authorization_response: str) -> Google
         'picture': user_info.get('picture'),
         'locale': user_info.get('locale'),
         'is_verified': user_info.get('verified_email', False),
-        'last_login_at': datetime.utcnow()
+        'last_login_at': datetime.now(timezone.utc)
     }
     
     if user:
         # Update existing user
         user = update_user(db, user, user_data)
         # Update Google tokens
-        update_user_google_tokens(
-            db, 
-            user, 
-            access_token, 
-            refresh_token, 
-            expires_at
-        )
+        update_user_google_tokens(db, user, access_token, refresh_token, expires_at)
     else:
         # Create new user
         user_data.update({
@@ -70,9 +64,7 @@ def authenticate_with_google(db: Session, authorization_response: str) -> Google
         user = create_user(db, user_data)
     
     # Create JWT access token
-    jwt_token = create_access_token(
-        data={"sub": str(user.id), "email": user.email}
-    )
+    jwt_token = create_access_token(data={"sub": str(user.id), "email": user.email})
     
     return GoogleOAuthResponse(
         access_token=jwt_token,

@@ -32,15 +32,10 @@ def update_user(db: Session, user: User, update_data: dict) -> User:
     return user
 
 
-def update_user_google_tokens(
-    db: Session, 
-    user: User, 
-    access_token: str,
-    refresh_token: Optional[str] = None,
-    expires_at: Optional[datetime] = None
-) -> User:
+def update_user_google_tokens(db: Session, user: User, access_token: str, refresh_token: Optional[str] = None, expires_at: Optional[datetime] = None) -> User:
     """Update user's Google OAuth tokens"""
     user.google_access_token = access_token
+    
     if refresh_token:
         user.google_refresh_token = refresh_token
     if expires_at:
