@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     
     # Frontend
     FRONTEND_URL: str
+
+    TIMEZONE: str = "Asia/Tehran" 
     
     class Config:
         env_file = ".env"

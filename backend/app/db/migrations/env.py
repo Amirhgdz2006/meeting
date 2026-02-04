@@ -13,6 +13,7 @@ from app.db.session.session import Base
 
 # Import کردن تمام models
 from app.modules.users.models import User
+from app.modules.meetings.models import Meeting
 
 
 # this is the Alembic Config object
