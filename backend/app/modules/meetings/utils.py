@@ -1,5 +1,5 @@
 from typing import List, Dict
-from datetime import datetime, timezone
+from datetime import datetime, timezone, time as dt_time
 from sqlalchemy.orm import Session
 from app.modules.users.repositories import get_user_by_email
 from app.integrations.google.calendar import get_user_freebusy, find_common_free_slots
@@ -45,7 +45,7 @@ def fetch_users_busy_times(
     Args:
         db: Database session
         emails: لیست ایمیل شرکت‌کنندگان
-        meeting_date: تاریخ جلسه
+        meeting_date: تاریخ جلسه (باید timezone-aware باشه)
     
     Returns:
         tuple: (لیست busy times, لیست user objects)
@@ -53,16 +53,13 @@ def fetch_users_busy_times(
     users_busy_times = []
     users = []
     
-    # تعریف بازه زمانی روز
-    from datetime import time as dt_time
-    time_min = datetime.combine(meeting_date.date(), dt_time(0, 0, 0))
-    time_max = datetime.combine(meeting_date.date(), dt_time(23, 59, 59))
+    # اطمینان از timezone awareness
+    if meeting_date.tzinfo is None:
+        meeting_date = meeting_date.replace(tzinfo=timezone.utc)
     
-    # تبدیل به timezone-aware
-    if time_min.tzinfo is None:
-        time_min = time_min.replace(tzinfo=timezone.utc)
-    if time_max.tzinfo is None:
-        time_max = time_max.replace(tzinfo=timezone.utc)
+    # تعریف بازه زمانی کامل روز (00:00 تا 23:59)
+    time_min = meeting_date.replace(hour=0, minute=0, second=0, microsecond=0)
+    time_max = meeting_date.replace(hour=23, minute=59, second=59, microsecond=999999)
     
     for email in emails:
         user = get_user_by_email(db, email)
@@ -77,15 +74,17 @@ def fetch_users_busy_times(
         access_token = get_valid_access_token(db, user)
         
         # دریافت freebusy
-        busy_times = get_user_freebusy(
-            access_token=access_token,
-            email=email,
-            time_min=time_min,
-            time_max=time_max
-        )
-        
-        users_busy_times.append(busy_times)
-        users.append(user)
+        try:
+            busy_times = get_user_freebusy(
+                access_token=access_token,
+                email=email,
+                time_min=time_min,
+                time_max=time_max
+            )
+            users_busy_times.append(busy_times)
+            users.append(user)
+        except Exception as e:
+            raise ValueError(f"Failed to fetch calendar data for {email}: {str(e)}")
     
     return users_busy_times, users
 
@@ -102,14 +101,20 @@ def find_available_meeting_slots(
     Args:
         db: Database session
         emails: لیست ایمیل شرکت‌کنندگان
-        meeting_date: تاریخ جلسه
+        meeting_date: تاریخ جلسه (باید timezone-aware باشه)
         meeting_length: طول جلسه به دقیقه
     
     Returns:
         لیست time slots خالی
     """
+    # اطمینان از timezone awareness
+    if meeting_date.tzinfo is None:
+        meeting_date = meeting_date.replace(tzinfo=timezone.utc)
+    
+    # دریافت busy times همه کاربران
     users_busy_times, _ = fetch_users_busy_times(db, emails, meeting_date)
     
+    # پیدا کردن free slots مشترک
     available_slots = find_common_free_slots(
         users_busy_times=users_busy_times,
         meeting_date=meeting_date,
@@ -133,6 +138,7 @@ def check_meeting_permission(meeting) -> bool:
         bool: True اگر مجوز داشته باشه
     """
     # TODO: پیاده‌سازی الگوریتم چک کردن مجوز
+    # مثلا بر اساس سطح سازمانی، تاریخ استخدام، نوع جلسه و...
     return True
 
 

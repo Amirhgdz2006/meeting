@@ -81,13 +81,13 @@ def create_new_meeting(
     
     # ۳. پیدا کردن تایم‌های خالی
     from datetime import time as dt_time
+    
+    # تبدیل date به datetime با timezone UTC
+    # ساعت 8 صبح رو به عنوان شروع روز در نظر میگیریم
     meeting_date_dt = datetime.combine(
         meeting_request.meeting_date,
-        dt_time(0, 0, 0)
-    )
-    # تبدیل به timezone-aware
-    if meeting_date_dt.tzinfo is None:
-        meeting_date_dt = meeting_date_dt.replace(tzinfo=timezone.utc)
+        dt_time(8, 0, 0)
+    ).replace(tzinfo=timezone.utc)
     
     available_slots = find_available_meeting_slots(
         db=db,
@@ -150,13 +150,12 @@ def schedule_meeting(
     
     # ۳. پیدا کردن تایم‌های خالی دوباره
     from datetime import time as dt_time
+    
+    # تبدیل date به datetime با timezone UTC
     meeting_date_dt = datetime.combine(
         meeting.meeting_date,
-        dt_time(0, 0, 0)
-    )
-    # تبدیل به timezone-aware
-    if meeting_date_dt.tzinfo is None:
-        meeting_date_dt = meeting_date_dt.replace(tzinfo=timezone.utc)
+        dt_time(8, 0, 0)
+    ).replace(tzinfo=timezone.utc)
     
     available_slots = find_available_meeting_slots(
         db=db,
