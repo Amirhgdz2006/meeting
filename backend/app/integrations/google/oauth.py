@@ -126,6 +126,11 @@ def is_google_token_expired(expires_at: datetime) -> bool:
 
     buffer_time = timedelta(minutes=5)
     now = datetime.now(timezone.utc)  # <-- tz-aware
+    
+    # Ensure expires_at is timezone-aware
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    
     return now + buffer_time >= expires_at
 
 

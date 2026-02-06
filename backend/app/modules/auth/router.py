@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from app.db.session.session import get_db
 from app.modules.auth.services import authenticate_with_google
 from app.integrations.google.oauth import get_google_authorization_url
+from app.core.security import create_access_token
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -27,7 +28,7 @@ async def google_login():
 
 
 @callback_router.get("/oauth2callback")
-async def oauth2callback(request: Request, db: Session = Depends(get_db)):
+async def oauth2callback(request: Request, response: Response, db: Session = Depends(get_db)):
     """
     Handle Google OAuth callback
     This endpoint matches the redirect_uri registered in Google Console
@@ -39,6 +40,18 @@ async def oauth2callback(request: Request, db: Session = Depends(get_db)):
         # Authenticate user with the full authorization response
         result = authenticate_with_google(db, authorization_response)
         
+
+        jwt_token = create_access_token(data={"sub": str(result.user.id)})
+
+        response.set_cookie(
+            key="access_token",
+            value=jwt_token,
+            httponly=True,
+            secure=False,  # Set to True in production with HTTPS
+            samesite="lax",
+            max_age=3600
+        )
+
         # Return JSON response
         return {
             "success": True,
@@ -57,6 +70,8 @@ async def oauth2callback(request: Request, db: Session = Depends(get_db)):
                 }
             }
         }
+    
+
         
     except Exception as e:
         raise HTTPException(
@@ -96,6 +111,8 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
                 }
             }
         }
+    
+
         
     except Exception as e:
         raise HTTPException(

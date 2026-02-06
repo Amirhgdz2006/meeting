@@ -7,16 +7,7 @@ from app.modules.auth.schemas import GoogleOAuthResponse, UserResponse
 
 
 def authenticate_with_google(db: Session, authorization_response: str) -> GoogleOAuthResponse:
-    """
-    Authenticate user with Google OAuth using the full authorization response URL
-    
-    Args:
-        db: Database session
-        authorization_response: Full callback URL from Google
-    
-    Returns:
-        GoogleOAuthResponse with JWT token and user info
-    """
+
     # Fetch credentials and user info from Google
     result = fetch_google_credentials_from_callback(authorization_response)
     

@@ -1,6 +1,6 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, Enum as SQLEnum, Date
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, Enum as SQLEnum, Date, JSON
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 import enum
 from app.db.session.session import Base
 
@@ -18,52 +18,38 @@ class MeetingLocation(str, enum.Enum):
 class MeetingStatus(str, enum.Enum):
     PENDING = "pending"
     APPROVED = "approved"
-    SCHEDULED = "scheduled"
     CANCELLED = "cancelled"
 
 
 class Meeting(Base):
     __tablename__ = "meetings"
     
-    # Primary info
     id = Column(Integer, primary_key=True, index=True)
-    title = Column(String, nullable=False)
-    description = Column(Text, nullable=True)
-    
-    # Meeting type and location
+
     meeting_type = Column(SQLEnum(MeetingType), nullable=False)
     meeting_location = Column(SQLEnum(MeetingLocation), nullable=False)
-    meeting_room = Column(String, nullable=True)  # فقط برای حضوری و داخلی
-    
-    # Timing
-    meeting_date = Column(Date, nullable=False)
-    meeting_length = Column(Integer, nullable=False)  # به دقیقه
-    start_time = Column(DateTime, nullable=True)  # زمان نهایی که انتخاب شده
+
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+
+    participants = Column(JSON, nullable=False, default=list)
+
+    meeting_length = Column(Integer, nullable=False)
+
+    meeting_date = Column(Date, nullable=True)
+
+    meeting_room = Column(String, nullable=True)
+
+    status = Column(SQLEnum(MeetingStatus), default=MeetingStatus.PENDING)
+    has_permission = Column(Boolean, default=True)
+
+    start_time = Column(DateTime, nullable=True)
     end_time = Column(DateTime, nullable=True)
     
-    # Status and permission
-    status = Column(SQLEnum(MeetingStatus), default=MeetingStatus.PENDING)
-    has_permission = Column(Boolean, default=True)  # فعلا همیشه True
-    
-    # Google Calendar
-    google_event_id = Column(String, nullable=True)  # برای sync با گوگل کلندر
-    
-    # Metadata
-    created_by = Column(Integer, nullable=False)  # user_id که جلسه رو ساخته
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    scheduled_at = Column(DateTime, nullable=True)  # زمانی که جلسه schedule شده
 
+    google_event_id = Column(String, nullable=True)
+    
+    created_by = Column(Integer, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    scheduled_at = Column(DateTime, nullable=True)
 
-class MeetingParticipant(Base):
-    __tablename__ = "meeting_participants"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    meeting_id = Column(Integer, nullable=False, index=True)
-    user_id = Column(Integer, nullable=False, index=True)
-    email = Column(String, nullable=False)  # برای راحتی کار با گوگل کلندر
-    
-    # Response status
-    response_status = Column(String, default="needsAction")  # needsAction, accepted, declined, tentative
-    
-    created_at = Column(DateTime, default=datetime.utcnow)
