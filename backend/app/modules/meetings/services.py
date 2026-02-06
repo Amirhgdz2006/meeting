@@ -2,7 +2,9 @@ from typing import List, Optional
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 import logging
-
+from app.core.redis_client import redis_client
+from app.core.security import create_access_token
+import json
 from app.modules.meetings.models import MeetingStatus, MeetingType
 from app.modules.meetings.repositories import (
     get_meeting_by_id,
@@ -12,6 +14,7 @@ from app.modules.meetings.repositories import (
     delete_meeting
 )
 from app.modules.meetings.schemas import (
+    MeetingCreateRequestRedis,
     MeetingCreateRequest,
     MeetingResponse,
     MeetingScheduleResponse,
@@ -31,6 +34,66 @@ from datetime import time as dt_time
 logger = logging.getLogger(__name__)
 
 
+def create_new_meeting_redis(db: Session, meeting_request: MeetingCreateRequestRedis, current_user_id: int):
+
+    participants_emails: List[str] = []
+    for email in meeting_request.participants:
+        user = get_user_by_email(db, email)
+        if not user:
+            raise ValueError(f"User with email {email} not found")
+        participants_emails.append(email)
+
+
+    meeting_date_dt = datetime.combine(
+        meeting_request.meeting_date,
+        dt_time(8, 0, 0)
+    ).replace(tzinfo=timezone.utc)
+
+    available_slots = find_available_meeting_slots(
+        db=db,
+        participants=participants_emails,
+        meeting_date=meeting_date_dt,
+        meeting_length=meeting_request.meeting_length
+    )
+
+    if not available_slots:
+        raise ValueError("No available time slots found for this meeting")
+
+
+    time_slots = [
+        TimeSlotSchema(start=slot["start"], end=slot["end"])
+        for slot in available_slots
+    ]
+
+    serializable_slots = [
+        {"start": slot["start"].isoformat(), "end": slot["end"].isoformat()}
+        for slot in available_slots
+    ]
+
+    redis_client.set(
+        str(current_user_id),
+        json.dumps({
+                "meeting_type": meeting_request.meeting_type.value if hasattr(meeting_request.meeting_type, "value") else meeting_request.meeting_type,
+                "meeting_location": meeting_request.meeting_location.value if hasattr(meeting_request.meeting_location, "value") else meeting_request.meeting_location,
+                "title": meeting_request.title,
+                "description": meeting_request.description,
+                "participants": participants_emails,
+                "meeting_length": meeting_request.meeting_length,
+                "meeting_date": str(meeting_request.meeting_date),
+                "meeting_room": meeting_request.meeting_room,
+                "meeting_available_times": serializable_slots,
+                "status": MeetingStatus.PENDING.value,
+                "has_permission": True,
+                "created_by": current_user_id
+            })
+    )
+
+    return AvailableTimeSlotsResponse(
+        available_slots=time_slots
+    )
+
+    
+
 def create_new_meeting(db: Session, meeting_request: MeetingCreateRequest, current_user_id: int):
 
     participants_emails: List[str] = []
@@ -49,41 +112,16 @@ def create_new_meeting(db: Session, meeting_request: MeetingCreateRequest, curre
         "meeting_length": meeting_request.meeting_length,
         "meeting_date": meeting_request.meeting_date,
         "meeting_room": meeting_request.meeting_room,
-        "status": MeetingStatus,
+        "start_time": meeting_request.start_time,
+        "end_time" : meeting_request.end_time,
+        "status": MeetingStatus.PENDING,
         "has_permission": True,
         "created_by": current_user_id
     }
 
     meeting = create_meeting(db, meeting_data)
 
-
-    meeting_date_dt = datetime.combine(
-        meeting_request.meeting_date,
-        dt_time(8, 0, 0)
-    ).replace(tzinfo=timezone.utc)
-
-
-    available_slots = find_available_meeting_slots(
-        db=db,
-        participants=participants_emails,
-        meeting_date=meeting_date_dt,
-        meeting_length=meeting_request.meeting_length
-    )
-
-    if not available_slots:
-        raise ValueError("No available time slots found for this meeting")
-
-
-    time_slots = [
-        TimeSlotSchema(start=slot["start"], end=slot["end"])
-        for slot in available_slots
-    ]
-
-    return AvailableTimeSlotsResponse(
-        meeting_id=meeting.id,
-        available_slots=time_slots,
-        selected_slot_index=0
-    )
+    return meeting
 
 
 def schedule_meeting(db: Session, meeting_id: int, selected_slot_index: int = 0):

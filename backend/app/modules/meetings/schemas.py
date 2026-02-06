@@ -8,7 +8,7 @@ from app.modules.meetings.models import (
 )
 
 
-class MeetingCreateRequest(BaseModel):
+class MeetingCreateRequestRedis(BaseModel):
     meeting_type: MeetingType
     meeting_location: MeetingLocation
     title: str = Field(..., min_length=1, max_length=255)
@@ -40,6 +40,43 @@ class MeetingCreateRequest(BaseModel):
     model_config = {
         "use_enum_values": True
     }
+
+
+class MeetingCreateRequest(BaseModel):
+    meeting_type: MeetingType
+    meeting_location: MeetingLocation
+    title: str = Field(..., min_length=1, max_length=255)
+    description: Optional[str] = None
+    participants: List[str] = Field(..., min_length=2)
+    meeting_length: int = Field(..., gt=0)
+    meeting_date: date
+    start_time: Optional[datetime]
+    end_time: Optional[datetime]
+    meeting_room: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_meeting_room(self):
+
+        if (
+            self.meeting_type == MeetingType.IN_PERSON
+            and self.meeting_location == MeetingLocation.INTERNAL
+        ):
+            if not self.meeting_room:
+                raise ValueError(
+                    "meeting_room is required for in-person internal meetings"
+                )
+        else:
+            if self.meeting_room:
+                raise ValueError(
+                    "meeting_room should be null for online or external meetings"
+                )
+
+        return self
+
+    model_config = {
+        "use_enum_values": True
+    }
+
 
 class MeetingResponse(BaseModel):
     id: int
@@ -87,9 +124,8 @@ class TimeSlotSchema(BaseModel):
 
 
 class AvailableTimeSlotsResponse(BaseModel):
-    meeting_id: int
     available_slots: List[TimeSlotSchema]
-    selected_slot_index: int = 0
+    # selected_slot_index: int = 0
 
     model_config = {
         "from_attributes": True
