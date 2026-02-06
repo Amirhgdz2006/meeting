@@ -15,3 +15,5 @@ python-multipart
 python-dateutil
 pytz
 tzdata
+redis
+hiredis

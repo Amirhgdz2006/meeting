@@ -10,6 +10,11 @@ class Settings(BaseSettings):
     POSTGRES_PORT: int
     SQLALCHEMY_DATABASE_URI: Optional[str] = None
     
+    # Redis (optional)
+    REDIS_HOST: str = "localhost"
+    REDIS_PORT: int = 6379
+    REDIS_DB: int = 0
+    
     # JWT
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
