@@ -112,7 +112,7 @@ def create_calendar_event(access_token: str, summary: str, description: str,
             'useDefault': False,
             'overrides': [
                 {'method': 'email', 'minutes': 24 * 60},
-                {'method': 'popup', 'minutes': 30},
+                {'method': 'popup', 'minutes': 15},
             ],
         },
     }

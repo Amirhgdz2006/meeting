@@ -224,9 +224,6 @@ def find_available_meeting_slots(db: Session, participants: List[str], meeting_d
     return result
 
 
-def check_meeting_permission(meeting):
-    return True
-
 def create_google_meet_description(meeting_room: str = None):
     description_parts = ["This meeting was automatically scheduled by Meeting Management System."]
     if meeting_room:

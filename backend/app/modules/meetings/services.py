@@ -1,5 +1,5 @@
-from typing import List, Optional
-from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
+from datetime import date, datetime, timezone
 from sqlalchemy.orm import Session
 import logging
 from app.core.redis_client import redis_client
@@ -23,15 +23,14 @@ from app.modules.meetings.schemas import (
 )
 from app.modules.meetings.utils import (
     find_available_meeting_slots,
-    check_meeting_permission,
     get_valid_access_token,
     create_google_meet_description
 )
-from app.modules.users.repositories import get_user_by_email
+from app.modules.users.repositories import get_user_by_email, get_user_by_id
 from app.integrations.google.calendar import create_calendar_event
 from datetime import time as dt_time
+from app.modules.meetings.algorithm import select_meeting_approvers
 
-logger = logging.getLogger(__name__)
 
 
 def create_new_meeting_redis(db: Session, meeting_request: MeetingCreateRequestRedis, current_user_id: int):
@@ -71,7 +70,7 @@ def create_new_meeting_redis(db: Session, meeting_request: MeetingCreateRequestR
     ]
 
     redis_client.set(
-        str(current_user_id),
+        f"user_id:{current_user_id}",
         json.dumps({
                 "meeting_type": meeting_request.meeting_type.value if hasattr(meeting_request.meeting_type, "value") else meeting_request.meeting_type,
                 "meeting_location": meeting_request.meeting_location.value if hasattr(meeting_request.meeting_location, "value") else meeting_request.meeting_location,
@@ -92,89 +91,32 @@ def create_new_meeting_redis(db: Session, meeting_request: MeetingCreateRequestR
         available_slots=time_slots
     )
 
-    
 
-def create_new_meeting(db: Session, meeting_request: MeetingCreateRequest, current_user_id: int):
-
-    participants_emails: List[str] = []
-    for email in meeting_request.participants:
-        user = get_user_by_email(db, email)
-        if not user:
-            raise ValueError(f"User with email {email} not found")
-        participants_emails.append(email)
-
-    meeting_data = {
-        "meeting_type": meeting_request.meeting_type,
-        "meeting_location": meeting_request.meeting_location,
-        "title": meeting_request.title,
-        "description": meeting_request.description,
-        "participants": participants_emails,
-        "meeting_length": meeting_request.meeting_length,
-        "meeting_date": meeting_request.meeting_date,
-        "meeting_room": meeting_request.meeting_room,
-        "start_time": meeting_request.start_time,
-        "end_time" : meeting_request.end_time,
-        "status": MeetingStatus.PENDING,
-        "has_permission": True,
-        "created_by": current_user_id
-    }
-
-    meeting = create_meeting(db, meeting_data)
-
-    return meeting
-
-
-def schedule_meeting(db: Session, meeting_id: int, selected_slot_index: int = 0):
-
-    logger.info(f"Scheduling meeting {meeting_id}")
+def schedule_meeting(db: Session, meeting_id: int):
 
     meeting = get_meeting_by_id(db, meeting_id)
     if not meeting:
         raise ValueError("Meeting not found")
 
 
-    if meeting.status == MeetingStatus.APPROVED:
-        raise ValueError("Meeting is already scheduled")
-
-
     participants: List[str] = meeting.participants or []
     if not participants:
         raise ValueError("Meeting has no participants")
 
-    logger.info("Meeting participants: %s", participants)
-
 
     if not meeting.meeting_date:
         raise ValueError("Meeting has no meeting_date set")
+    
+    if not meeting.start_time:
+        raise ValueError("Meeting has no start_time set")
+    
+    if not meeting.end_time:
+        raise ValueError("Meeting has no end_time set")
 
-    meeting_date_dt = datetime.combine(
-        meeting.meeting_date,
-        dt_time(8, 0, 0)
-    ).replace(tzinfo=timezone.utc)
-
-    available_slots = find_available_meeting_slots(
-        db=db,
-        participants=participants,
-        meeting_date=meeting_date_dt,
-        meeting_length=meeting.meeting_length
-    )
-
-    if not available_slots or selected_slot_index >= len(available_slots):
-        raise ValueError("Selected time slot is not available")
-
-    selected_slot = available_slots[selected_slot_index]
-    start_time = selected_slot["start"]
-    end_time = selected_slot["end"]
-
-    logger.info("Selected slot %d: %s - %s", selected_slot_index, start_time.isoformat(), end_time.isoformat())
-
-
-    has_permission = check_meeting_permission(meeting)
-    if not has_permission:
+    if not meeting.has_permission:
         raise ValueError("Meeting does not have permission to be scheduled")
 
 
-    creator_user = None
     for email in participants:
         user = get_user_by_email(db, email)
         if user and getattr(user, "google_calendar_connected", False):
@@ -197,8 +139,8 @@ def schedule_meeting(db: Session, meeting_id: int, selected_slot_index: int = 0)
         access_token=creator_access_token,
         summary=meeting.title,
         description=description,
-        start_time=start_time,
-        end_time=end_time,
+        start_time=meeting.start_time,
+        end_time=meeting.end_time,
         attendees=participants,
         location=meeting.meeting_room if meeting.meeting_room else None,
         conference_data=needs_conference
@@ -207,19 +149,13 @@ def schedule_meeting(db: Session, meeting_id: int, selected_slot_index: int = 0)
     event_id = event.get("id")
     google_link = event.get("htmlLink")
 
-    logger.info("Calendar event created with id=%s", event_id)
-
 
     update_data = {
-        "start_time": start_time,
-        "end_time": end_time,
         "google_event_id": event_id,
-        "has_permission": has_permission,
         "scheduled_at": datetime.now(timezone.utc)
     }
 
     meeting = update_meeting(db, meeting, update_data)
-    meeting = update_meeting_status(db, meeting, MeetingStatus.APPROVED)
 
 
     meeting_response = MeetingResponse(
@@ -242,7 +178,6 @@ def schedule_meeting(db: Session, meeting_id: int, selected_slot_index: int = 0)
         scheduled_at=meeting.scheduled_at
     )
 
-    logger.info("Meeting %s scheduled successfully", meeting_id)
 
     return MeetingScheduleResponse(
         success=True,
@@ -250,6 +185,84 @@ def schedule_meeting(db: Session, meeting_id: int, selected_slot_index: int = 0)
         meeting=meeting_response,
         google_calendar_link=google_link
     )
+
+
+def create_new_meeting(db: Session, meeting_request: MeetingCreateRequest, current_user_id: int):
+
+    participants_data: List[Dict[str, Any]] = []
+    participants_emails: List[str] = []
+    
+    for email in meeting_request.participants:
+        user = get_user_by_email(db, email)
+        if not user:
+            raise ValueError(f"User with email {email} not found")
+        participants_emails.append(email)
+
+        participants_data.append({
+            "user_email": user.email,
+            "org_level": user.org_level,
+            "hire_date": user.hire_date.strftime("%Y-%m") if isinstance(user.hire_date, (date, datetime)) else user.hire_date
+        })
+
+
+    approvers = select_meeting_approvers(participants_data)
+
+    current_user = get_user_by_id(db=db, id=current_user_id)
+
+    if approvers == [] or (len(approvers) == 1 and approvers[0]["user_email"] == current_user.email):
+        has_permission = True
+        meeting_status = MeetingStatus.APPROVED
+
+        meeting_data = {
+        "meeting_type": meeting_request.meeting_type,
+        "meeting_location": meeting_request.meeting_location,
+        "title": meeting_request.title,
+        "description": meeting_request.description,
+        "participants": participants_emails,
+        "meeting_length": meeting_request.meeting_length,
+        "meeting_date": meeting_request.meeting_date,
+        "meeting_room": meeting_request.meeting_room,
+        "start_time": meeting_request.start_time,
+        "end_time" : meeting_request.end_time,
+        "status": meeting_status,
+        "has_permission": has_permission,
+        "created_by": current_user_id
+        }
+
+        meeting = create_meeting(db, meeting_data)
+        result = schedule_meeting(db=db, meeting_id=meeting.id)
+
+        return result
+
+
+
+    else:
+        has_permission = False
+        meeting_status = MeetingStatus.PENDING
+
+
+        meeting_data = {
+            "meeting_type": meeting_request.meeting_type,
+            "meeting_location": meeting_request.meeting_location,
+            "title": meeting_request.title,
+            "description": meeting_request.description,
+            "participants": participants_emails,
+            "meeting_length": meeting_request.meeting_length,
+            "meeting_date": meeting_request.meeting_date,
+            "meeting_room": meeting_request.meeting_room,
+            "start_time": meeting_request.start_time,
+            "end_time" : meeting_request.end_time,
+            "status": meeting_status,
+            "has_permission": has_permission,
+            "created_by": current_user_id
+        }
+
+        meeting = create_meeting(db, meeting_data)
+
+        return meeting
+
+
+
 
 
 def get_meeting_details(db: Session, meeting_id: int):

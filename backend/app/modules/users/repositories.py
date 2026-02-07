@@ -9,6 +9,9 @@ def get_user_by_email(db: Session, email: str) -> Optional[User]:
     return db.query(User).filter(User.email == email).first()
 
 
+def get_user_by_id(db: Session, id: int):
+    return db.query(User).filter(User.id == id).first()
+
 def get_user_by_google_id(db: Session, google_id: str) -> Optional[User]:
     """Get user by Google ID"""
     return db.query(User).filter(User.google_id == google_id).first()

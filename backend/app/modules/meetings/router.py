@@ -51,7 +51,7 @@ async def available_meeting_times(request:Request, meeting_request: MeetingCreat
 
 
 
-@router.get("/create/{selected_slot_index}", response_model=MeetingResponse, status_code=status.HTTP_201_CREATED)
+@router.get("/create/{selected_slot_index}", response_model=MeetingScheduleResponse, status_code=status.HTTP_201_CREATED)
 async def create_meeting_endpoint(selected_slot_index: int, request:Request, db: Session = Depends(get_db)):
 
     try:
@@ -69,7 +69,7 @@ async def create_meeting_endpoint(selected_slot_index: int, request:Request, db:
         if user_id is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Invalid token payload")
 
-        redis_raw = redis_client.get(str(user_id))
+        redis_raw = redis_client.get(f"user_id:{user_id}")
         if not redis_raw:
             raise ValueError("No draft meeting found in Redis")
 
@@ -78,6 +78,7 @@ async def create_meeting_endpoint(selected_slot_index: int, request:Request, db:
         else:
             redis_data = redis_raw
 
+        
         result = create_new_meeting(
             db=db,
             meeting_request=MeetingCreateRequest(
@@ -95,6 +96,7 @@ async def create_meeting_endpoint(selected_slot_index: int, request:Request, db:
                     current_user_id=user_id
         )
         
+        redis_client.delete(f"user_id:{user_id}")
         return result
         
     except ValueError as e:

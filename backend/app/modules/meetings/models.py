@@ -41,7 +41,7 @@ class Meeting(Base):
     meeting_room = Column(String, nullable=True)
 
     status = Column(SQLEnum(MeetingStatus), default=MeetingStatus.PENDING)
-    has_permission = Column(Boolean, default=True)
+    has_permission = Column(Boolean, default=False)
 
     start_time = Column(DateTime, nullable=True)
     end_time = Column(DateTime, nullable=True)
