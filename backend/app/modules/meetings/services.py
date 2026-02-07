@@ -92,17 +92,16 @@ def create_new_meeting_redis(db: Session, meeting_request: MeetingCreateRequestR
     )
 
 
-def schedule_meeting(db: Session, meeting_id: int):
 
+def schedule_meeting(db: Session, meeting_id: int):
+    
     meeting = get_meeting_by_id(db, meeting_id)
     if not meeting:
         raise ValueError("Meeting not found")
 
-
     participants: List[str] = meeting.participants or []
     if not participants:
         raise ValueError("Meeting has no participants")
-
 
     if not meeting.meeting_date:
         raise ValueError("Meeting has no meeting_date set")
@@ -116,47 +115,53 @@ def schedule_meeting(db: Session, meeting_id: int):
     if not meeting.has_permission:
         raise ValueError("Meeting does not have permission to be scheduled")
 
-
-    for email in participants:
-        user = get_user_by_email(db, email)
-        if user and getattr(user, "google_calendar_connected", False):
-            creator_user = user
-            break
-
-    if not creator_user:
-        raise ValueError("No participant with a connected Google Calendar was found to create the event")
-
-
-    creator_access_token = get_valid_access_token(db, creator_user)
-
-
     description = meeting.description or ""
     description += "\n\n" + create_google_meet_description(meeting.meeting_room)
     needs_conference = (meeting.meeting_type == MeetingType.ONLINE)
 
 
-    event = create_calendar_event(
-        access_token=creator_access_token,
-        summary=meeting.title,
-        description=description,
-        start_time=meeting.start_time,
-        end_time=meeting.end_time,
-        attendees=participants,
-        location=meeting.meeting_room if meeting.meeting_room else None,
-        conference_data=needs_conference
-    )
+    organizer = get_user_by_id(db, meeting.created_by)
+    if not organizer:
+        raise ValueError("Organizer not found")
 
-    event_id = event.get("id")
-    google_link = event.get("htmlLink")
+    if not organizer.google_calendar_connected:
+        raise ValueError("Organizer calendar not connected")
+
+    if not organizer.google_access_token or not organizer.google_token_expires_at:
+        raise ValueError("Organizer has no valid token")
+
+    try:
+        access_token = get_valid_access_token(db, organizer)
+
+        created_event = create_calendar_event(
+            access_token=access_token,
+            summary=meeting.title,
+            description=description,
+            start_time=meeting.start_time,
+            end_time=meeting.end_time,
+            attendees=participants,
+            location=meeting.meeting_room if meeting.meeting_room else None,
+            conference_data=needs_conference
+        )
+
+        if not created_event or not isinstance(created_event, dict):
+            raise ValueError("Invalid event response from Google")
+
+        primary_event_id = created_event.get("id")
+        if not primary_event_id:
+            raise ValueError("No event ID returned from Google")
+
+    except Exception as e:
+        logging.error(f"Failed to create calendar event: {str(e)}")
+        raise ValueError(f"Failed to create calendar event: {str(e)}")
 
 
     update_data = {
-        "google_event_id": event_id,
+        "google_event_id": primary_event_id,
         "scheduled_at": datetime.now(timezone.utc)
     }
 
     meeting = update_meeting(db, meeting, update_data)
-
 
     meeting_response = MeetingResponse(
         id=meeting.id,
@@ -178,12 +183,11 @@ def schedule_meeting(db: Session, meeting_id: int):
         scheduled_at=meeting.scheduled_at
     )
 
-
     return MeetingScheduleResponse(
         success=True,
         message="Meeting scheduled successfully",
         meeting=meeting_response,
-        google_calendar_link=google_link
+        google_calendar_link=None
     )
 
 

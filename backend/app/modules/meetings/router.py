@@ -78,6 +78,11 @@ async def create_meeting_endpoint(selected_slot_index: int, request:Request, db:
         else:
             redis_data = redis_raw
 
+        # Validate selected_slot_index
+        available_times = redis_data.get("meeting_available_times", [])
+        if selected_slot_index < 0 or selected_slot_index >= len(available_times):
+            raise ValueError(f"Invalid slot index {selected_slot_index}. Available slots: {len(available_times)}")
+
         
         result = create_new_meeting(
             db=db,
@@ -89,8 +94,8 @@ async def create_meeting_endpoint(selected_slot_index: int, request:Request, db:
                     participants=redis_data["participants"],
                     meeting_length=redis_data["meeting_length"],
                     meeting_date=redis_data["meeting_date"],
-                    start_time=redis_data["meeting_available_times"][selected_slot_index]["start"],
-                    end_time=redis_data["meeting_available_times"][selected_slot_index]["end"],
+                    start_time=available_times[selected_slot_index]["start"],
+                    end_time=available_times[selected_slot_index]["end"],
                     meeting_room=redis_data["meeting_room"]
                     ),
                     current_user_id=user_id

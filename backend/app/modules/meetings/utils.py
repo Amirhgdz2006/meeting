@@ -14,15 +14,30 @@ logger = logging.getLogger(__name__)
 
 
 def get_valid_access_token(db: Session, user):
+    """Get a valid Google access token for the user, refreshing if needed."""
+    if not user.google_access_token:
+        raise ValueError(f"User {user.email} has no access token")
+    
+    if not user.google_token_expires_at:
+        raise ValueError(f"User {user.email} has no token expiry info")
+    
+    if not user.google_refresh_token:
+        raise ValueError(f"User {user.email} has no refresh token")
+    
     if is_google_token_expired(user.google_token_expires_at):
-        result = refresh_google_access_token(user.google_refresh_token)
-        update_user_google_tokens(
-            db=db,
-            user=user,
-            access_token=result['access_token'],
-            expires_at=result['expiry']
-        )
-        return result['access_token']
+        try:
+            result = refresh_google_access_token(user.google_refresh_token)
+            update_user_google_tokens(
+                db=db,
+                user=user,
+                access_token=result['access_token'],
+                expires_at=result['expiry']
+            )
+            return result['access_token']
+        except Exception as e:
+            logger.error(f"Failed to refresh token for {user.email}: {str(e)}")
+            raise ValueError(f"Failed to refresh Google token for {user.email}")
+    
     return user.google_access_token
 
 

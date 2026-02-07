@@ -49,7 +49,7 @@ async def oauth2callback(request: Request, response: Response, db: Session = Dep
             httponly=True,
             secure=False,  # Set to True in production with HTTPS
             samesite="lax",
-            max_age=3600
+            max_age=3600 * 24 * 7
         )
 
         # Return JSON response
