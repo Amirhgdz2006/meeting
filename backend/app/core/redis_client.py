@@ -43,6 +43,20 @@ class SimpleRedis:
         except Exception:
             return False
     
+    def update(self, key: str, fields: dict, ttl: int = None):
+        if not self.client:
+            return False
+        try:
+            current = self.get(key)
+            if not isinstance(current, dict):
+                return False
+            
+            current.update(fields)
+            return self.set(key, current, ttl)
+        except Exception:
+            return False
+
+
     def get(self, key: str):
         if not self.client:
             return None

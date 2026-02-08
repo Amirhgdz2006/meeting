@@ -116,34 +116,6 @@ async def create_meeting_endpoint(selected_slot_index: int, request:Request, db:
         )
 
 
-# @router.post("/{meeting_id}/schedule", response_model=MeetingScheduleResponse)
-# async def schedule_meeting_endpoint(
-#     meeting_id: int,
-#     selected_slot_index: int = 0,
-#     db: Session = Depends(get_db)
-# ):
-
-#     try:
-#         result = schedule_meeting(
-#             db=db,
-#             meeting_id=meeting_id,
-#             selected_slot_index=selected_slot_index
-#         )
-        
-#         return result
-        
-#     except ValueError as e:
-#         raise HTTPException(
-#             status_code=status.HTTP_400_BAD_REQUEST,
-#             detail=str(e)
-#         )
-#     except Exception as e:
-#         raise HTTPException(
-#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-#             detail=f"Failed to schedule meeting: {str(e)}"
-#         )
-
-
 
 
 

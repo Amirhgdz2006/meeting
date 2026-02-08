@@ -191,6 +191,65 @@ def schedule_meeting(db: Session, meeting_id: int):
     )
 
 
+
+###### helper ##########
+def check_qualified_participants(db:Session, meeting_id:int):
+    pass # --> بعدا باید درست شه
+    
+    data = redis_client.get(f"user_id:{meeting_id}")
+    if not data:
+        return False
+    
+    approved = data.get("approved_count")
+    qualified_participants = data.get("qualified_participants")
+
+    if (approved + 1) == len(qualified_participants):
+    
+        redis_client.delete(f"user_id:{meeting_id}")
+        return schedule_meeting(db=db, meeting_id=meeting_id)
+
+    else:  
+        redis_client.update_fields(
+            f"user_id:{meeting_id}",
+            {"approved_count": approved + 1}
+        )
+
+
+def handle_pending_meetings(db:Session, meeting_id:int, qualified_participants:List[str]):
+    
+    meeting = get_meeting_by_id(db, meeting_id)
+    if not meeting:
+        raise ValueError("Meeting not found")
+    
+    participants: List[str] = meeting.participants or []
+    if not participants:
+        raise ValueError("Meeting has no participants")
+    
+    organizer = get_user_by_id(db, meeting.created_by)
+    if not organizer:
+        raise ValueError("Organizer not found")
+    
+    if organizer in qualified_participants:
+        qualified_participants.remove(organizer)
+
+    redis_client.set(
+        f"user_id:{meeting_id}",
+        json.dumps({
+              "qualified_participants" :  qualified_participants,
+              "approved_count" : 0
+            })
+    )
+
+    pass #---> وسه همه افراد مورد تایید باید یک پیامی ارسال شه
+
+    return {"message":f"Meeting must be approved by {qualified_participants}"}
+    
+    
+#########################
+
+
+
+
 def create_new_meeting(db: Session, meeting_request: MeetingCreateRequest, current_user_id: int):
 
     participants_data: List[Dict[str, Any]] = []
@@ -234,7 +293,7 @@ def create_new_meeting(db: Session, meeting_request: MeetingCreateRequest, curre
         }
 
         meeting = create_meeting(db, meeting_data)
-        result = schedule_meeting(db=db, meeting_id=meeting.id)
+        result = schedule_meeting(db=db, meeting_id=meeting.id, )
 
         return result
 
@@ -262,10 +321,10 @@ def create_new_meeting(db: Session, meeting_request: MeetingCreateRequest, curre
         }
 
         meeting = create_meeting(db, meeting_data)
+        approvers_email = [user["user_email"] for user in approvers]
+        result = handle_pending_meetings(db=db, meeting_id=meeting.id, qualified_participants=approvers_email)
 
         return meeting
-
-
 
 
 
